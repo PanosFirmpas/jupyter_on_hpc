@@ -1,0 +1,64 @@
+#!/bin/bash
+#
+#SBATCH --job-name=notebook
+#SBATCH --output=/PATH/TO/NOTEBOOK/logs/slurm-notebook-%j.o.out
+#SBATCH --error=/PATH/TO/NOTEBOOK/logs/slurm-notebook-%j.e.out
+#
+#SBATCH --ntasks=1
+#
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=4
+####  SBATCH --exclude=nodo[01-12]
+
+
+##### #$ -S /bin/bash
+##### #$ -N notebook
+##### #$ -cwdq
+##### #$ -V
+##### #$ -q smp.q
+##### #$ -pe smp 20
+##### #$ -e /home/ska/panos/notebooks/logs
+##### #$ -o /home/ska/panos/notebooks/logs
+##### #$ -l h=nodo13
+
+
+source /PATH/TO/YOUR_VIRTUALENV/bin/activate
+source ~/.fix_paths
+
+#set a port (this is also set in the ssh/config of my desktop)
+NOTEBOOKPORT=9292
+
+
+TMPDIR=/scratch/tmp_private_${SLURM_JOB_ID}
+
+mkdir ${TMPDIR}  && cd ${TMPDIR}
+
+
+mkdir pytemp
+
+socket_name=${TMPDIR}/SSHsocket_${SLURM_JOB_ID}
+
+
+### This starts an ssh tunnel, somethingsomething master (?) at a specific socket (???) which is an actual file
+### and sends it to the background. This will pipe the notebook to nodo00, the login node
+### We pipe it this way, because we can later explicitely close this ssh connection
+ssh -M -S ${socket_name} -fN -R localhost:${NOTEBOOKPORT}:localhost:${NOTEBOOKPORT} nodo00
+
+
+# otherwise, there's some permission problem
+# XDG_RUNTIME_DIR=/home/ska/panos/.local/share/jupyter/runtime
+XDG_RUNTIME_DIR=''
+
+
+###start the notebook
+jupyter notebook --port=${NOTEBOOKPORT} --no-browser
+
+
+### after the notebook server closes, we use the socket to specifically close that
+### ssh tunnel that we sent to the background
+ssh -S ${socket_name} -O exit nodo00
+
+rm -r ${TMPDIR}
+
+
+
